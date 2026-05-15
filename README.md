@@ -1,170 +1,266 @@
-FactoryIQ Manufacturing Management Portal Architecture
-1. System Overview
-FactoryIQ is a manufacturing management portal built as a single-page React/Vite frontend that communicates with a Django REST backend.
+FactoryIQ Manufacturing Management Portal
 
-Frontend: frontend/
-Backend: backend/
-API prefix: /api/
-Local frontend dev server: http://localhost:5173/
-Local backend dev server: http://127.0.0.1:8000/
-The application supports:
+FactoryIQ is a full-stack manufacturing management platform built with React + Vite on the frontend and Django REST Framework on the backend.
+It provides secure JWT authentication, role-based access control, and modules for projects, production, quality management, and inventory tracking.
 
-User registration and login
+🚀 Features
+JWT Authentication
+User Registration & Login
+Role-Based Access Control
+Protected Frontend Routes
+Manufacturing Dashboard
+Project Management
+Production Workflow Management
+Quality Management
+Inventory & Supply Chain Management
+REST API Architecture
+React SPA Frontend
+Django REST Backend
+🛠 Tech Stack
+Frontend
+React
+Vite
+React Router DOM
+Axios
+Context API
+Backend
+Django
+Django REST Framework
+SimpleJWT
+SQLite (Development)
+MySQL (Production)
+📁 Project Structure
+FactoryIQ/
+│
+├── frontend/
+│   ├── src/
+│   │   ├── context/
+│   │   ├── lib/
+│   │   ├── ui/
+│   │   ├── views/
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   │
+│   └── package.json
+│
+├── backend/
+│   ├── factoryiq/
+│   ├── users/
+│   ├── projects/
+│   ├── production/
+│   ├── quality/
+│   ├── supplychain/
+│   └── manage.py
+│
+└── README.md
+⚙️ System Architecture
+Frontend
+
+The frontend is a single-page application built with React and Vite.
+
+Main Responsibilities
+Authentication handling
+Protected routing
+Role-based navigation
+API communication
+Dashboard and business modules
+Important Files
+File	Purpose
+src/main.jsx	React entry point
+src/App.jsx	Main route configuration
+src/context/AuthContext.jsx	Authentication state management
+src/lib/api.js	Shared Axios API client
+src/lib/auth.js	JWT localStorage helper
+src/ui/RequireAuth.jsx	Route protection
+src/ui/AppLayout.jsx	Shared authenticated layout
+Backend
+
+The backend is built using Django REST Framework and provides REST APIs for authentication and manufacturing modules.
+
+Main Responsibilities
 JWT authentication
-Role-based navigation and access control
-Projects, production, quality, and inventory views
-Backend data services for user profile and business domain APIs
-2. Frontend Architecture
-2.1 Entry point and routing
-frontend/src/main.jsx: bootstraps React and renders the app.
-frontend/src/App.jsx: defines the main route tree.
-Route summary:
+User management
+API authorization
+Domain services
+Database interaction
+Important Files
+File	Purpose
+factoryiq/settings.py	Project settings
+factoryiq/urls.py	Root API routing
+users/models.py	Custom user model
+users/serializers.py	Authentication serializers
+users/views.py	Registration and profile APIs
+users/urls.py	Authentication routes
+🔐 Authentication Flow
+Registration
+User submits registration form
 
-/ redirects to /dashboard if authenticated, otherwise /login
-/login renders LoginPage
-/register renders RegisterPage
-Protected routes under RequireAuth:
-/dashboard → DashboardPage
-/projects → ProjectsPage
-/production → ProductionPage
-/quality → QualityPage
-/inventory → InventoryPage
-Any unknown route redirects to /
-2.2 Authentication flow
-frontend/src/lib/auth.js manages auth token state using localStorage.
-frontend/src/context/AuthContext.jsx manages current user data and refresh logic.
-frontend/src/ui/RequireAuth.jsx blocks access to protected pages when no token exists and redirects to /login.
-frontend/src/ui/AppLayout.jsx renders the main shell and navigation bar for logged-in users.
-Auth state behavior:
+Frontend sends POST request to:
 
-Login obtains a JWT access token from /api/auth/token/
-Token is saved with setAccessToken() into localStorage
-AuthContext fetches /api/auth/profile/ to load user details and role
-Logout clears token and sends the user back to /login
-2.3 Page and navigation behavior
-AppLayout provides the shared layout and top navigation for protected pages.
-AppLayout uses user role to conditionally show links:
-admin sees all pages
-engineer sees dashboard, projects, production
-quality sees dashboard, projects, quality
-customer sees dashboard, projects
-Page list:
+/api/auth/register/
+Backend creates user and hashes password
+User is redirected to login page
+Login
+User submits credentials
 
-LoginPage.jsx: username/password login
-RegisterPage.jsx: create account with username, email, name, role, password
-DashboardPage.jsx: main landing page after login
-ProjectsPage.jsx: project management view
-ProductionPage.jsx: production workflow view
-QualityPage.jsx: quality management view
-InventoryPage.jsx: inventory and supply chain view
-2.4 API client
-frontend/src/lib/api.js exports a shared Axios instance.
-Default backend base URL is http://127.0.0.1:8000 unless overridden by VITE_API_BASE_URL.
-The Axios instance attaches the Authorization: Bearer <token> header automatically when available.
-If the backend returns 401 Unauthorized, the frontend clears auth state and forces re-login.
-2.5 Data flow for auth and registration
-Registration flow:
+Frontend sends POST request to:
 
-User submits the form in RegisterPage
-Frontend POSTs /api/auth/register/ with JSON payload
-Backend creates a user and returns success
-Frontend redirects to /login
-Login flow:
-
-User submits credentials in LoginPage
-Frontend POSTs /api/auth/token/ and receives JWT access token
+/api/auth/token/
+Backend returns JWT access token
 Token is stored in localStorage
-AuthContext refreshes the user profile from /api/auth/profile/
-User is redirected to /dashboard
-3. Backend Architecture
-3.1 Django project layout
-backend/manage.py: Django CLI entry point
-backend/factoryiq/: Django project configuration
-settings.py: project settings, installed apps, database setup, CORS, authentication
-urls.py: root URL routing and API namespace setup
-backend/users/: authentication user app
-backend/projects/, backend/production/, backend/quality/, backend/supplychain/: domain apps
-3.2 Authentication backend
-backend/users/models.py: custom User model extends AbstractUser
-Adds role with choices admin, engineer, quality, customer
-backend/users/serializers.py:
-RegisterSerializer: creates new users and hashes password
-UserSerializer: returns authenticated user profile data
-backend/users/views.py:
-RegisterView: allows unauthenticated POST to create a user
-ProfileView: authenticated GET for current user profile
-backend/factoryiq/urls.py configures auth endpoints:
-api/auth/register/
-api/auth/profile/
-api/auth/token/
-api/auth/token/refresh/
-3.3 API routing and domain apps
-Root URL routing in backend/factoryiq/urls.py:
 
-api/auth/ → users.urls
-api/auth/token/ and api/auth/token/refresh/ → JWT views
-api/ → includes projects, production, quality, supplychain URL modules
-This creates a clean API boundary where the frontend only interacts with /api/ endpoints.
+Frontend loads current user profile from:
 
-3.4 Request flow for protected resources
-When frontend sends a request to a protected endpoint, the shared Axios client attaches the JWT access token.
-Django REST Framework authenticates the token and determines user identity.
-Protected views use permissions.IsAuthenticated or custom permissions to allow access.
-The backend returns domain data for projects, production, quality, or inventory.
-3.5 Database and environment behavior
-Development uses SQLite when DJANGO_USE_SQLITE=1.
-Production is configured for MySQL by environment variables, but local development is intentionally simplified.
-Migrations are managed via backend/manage.py migrate.
-4. File and feature mapping
-Frontend key files:
+/api/auth/profile/
+🔒 Protected Routes
 
-frontend/src/App.jsx: main route definitions
-frontend/src/context/AuthContext.jsx: current user and auth refresh logic
-frontend/src/lib/api.js: REST client
-frontend/src/lib/auth.js: localStorage token helper
-frontend/src/ui/AppLayout.jsx: authenticated page shell and navigation
-frontend/src/ui/RequireAuth.jsx: protects routes
-frontend/src/views/LoginPage.jsx: login screen
-frontend/src/views/RegisterPage.jsx: registration screen
-frontend/src/views/DashboardPage.jsx: dashboard landing page
-Backend key files:
-
-backend/factoryiq/settings.py: application settings and CORS configuration
-backend/factoryiq/urls.py: root API routing
-backend/users/models.py: custom user definition
-backend/users/serializers.py: auth serializers
-backend/users/views.py: registration and profile views
-backend/users/urls.py: auth endpoint paths
-5. Navigation and access flow
-Public pages:
-
-/login: user login page
-/register: new account creation page
-Protected pages (require valid JWT):
+The following routes require authentication:
 
 /dashboard
 /projects
 /production
 /quality
 /inventory
-Protected pages are rendered inside AppLayout and share the same header/navigation.
 
-Role-based visibility:
+If JWT token expires or becomes invalid:
 
-admin: can access all protected pages
-engineer: sees production in addition to dashboard and projects
-quality: sees quality in addition to dashboard and projects
-customer: sees only dashboard and projects
-6. Practical notes
-If the backend is not running, registration and login fail because the frontend cannot reach /api/auth/*.
-If tokens are invalid or expired, the frontend clears auth and forces re-login.
-The backend must be reachable at VITE_API_BASE_URL or the default backend URL for frontend requests to work.
-For development, start backend first, then frontend.
-7. Recommended startup sequence
+Frontend automatically clears auth state
+User is redirected to /login
+👥 Role-Based Access Control
+Role	Accessible Pages
+admin	All pages
+engineer	Dashboard, Projects, Production
+quality	Dashboard, Projects, Quality
+customer	Dashboard, Projects
+🌐 API Endpoints
+Authentication APIs
+Endpoint	Method	Description
+/api/auth/register/	POST	Register new user
+/api/auth/token/	POST	Obtain JWT token
+/api/auth/token/refresh/	POST	Refresh JWT token
+/api/auth/profile/	GET	Current user profile
+📡 API Client Behavior
+
+The frontend uses a shared Axios instance.
+
+Features
+
+Automatically attaches:
+
+Authorization: Bearer <token>
+Handles unauthorized responses
+Clears invalid sessions automatically
+🗄 Database Configuration
+Development
+
+Uses SQLite when:
+
+DJANGO_USE_SQLITE=1
+Production
+
+Configured for MySQL using environment variables.
+
+▶️ Local Development Setup
+1️⃣ Clone Repository
+git clone <your-repository-url>
+cd FactoryIQ
+2️⃣ Backend Setup
+cd backend
+
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Linux/Mac
+source venv/bin/activate
+
+pip install -r requirements.txt
+
+python manage.py migrate
+
+python manage.py runserver
+
+Backend runs on:
+
+http://127.0.0.1:8000/
+3️⃣ Frontend Setup
+
+Open another terminal:
+
+cd frontend
+
+npm install
+
+npm run dev
+
+Frontend runs on:
+
+http://localhost:5173/
+🔄 Recommended Startup Sequence
+
+Start backend first:
+
 cd backend
 python manage.py migrate
 python manage.py runserver
-cd ../frontend
+
+Then start frontend:
+
+cd frontend
 npm install
 npm run dev
-This ensures the backend API is available before the frontend starts making authenticated requests.
+📌 Environment Variables
+Frontend
+VITE_API_BASE_URL=http://127.0.0.1:8000
+Backend
+
+Example:
+
+DJANGO_USE_SQLITE=1
+
+Production MySQL variables can also be configured.
+
+🧩 Application Modules
+Dashboard
+
+Central landing page after login.
+
+Projects
+
+Project management and tracking.
+
+Production
+
+Production workflow management.
+
+Quality
+
+Quality assurance and monitoring.
+
+Inventory
+
+Inventory and supply chain tracking.
+
+🔐 Security Features
+JWT authentication
+Protected API endpoints
+Role-based authorization
+Automatic logout on token expiration
+Password hashing using Django authentication system
+📈 Future Improvements
+Refresh token rotation
+Notifications system
+Real-time production updates
+Analytics dashboard
+File uploads
+Audit logs
+Deployment with Docker
+CI/CD integration
+👨‍💻 Author
+
+Developed by Hima Teja
+
+📄 License
+
+This project is licensed under the MIT License.
