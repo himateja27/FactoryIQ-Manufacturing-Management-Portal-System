@@ -1,474 +1,199 @@
-# 🏗️ Architecture & Feature Flow
+# FactoryIQ Manufacturing Management Portal Architecture
 
-## System Architecture
+## 1. System Overview
+FactoryIQ is a manufacturing management portal built as a single-page React/Vite frontend that communicates with a Django REST backend.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         FRONTEND (React)                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  Projects Page                 New Components                     │
-│  ├─ Advanced Filters ────────→ AdvancedFilters.jsx              │
-│  ├─ Project List              ├─ Status filter                   │
-│  │   ├─ Details Expand ─────→ │  Approval filter                │
-│  │   ├─ Documents ──────────→ DocumentsList.jsx                 │
-│  │   │   └─ Upload ────────→ DocumentUpload.jsx                 │
-│  │   └─ Approval ──────────→ ApprovalWorkflow.jsx               │
-│  │       ├─ Approve/Reject                                       │
-│  │       └─ Request Changes                                      │
-│  │                                                                │
-│  └─ API Calls (Axios with Auth Token)                            │
-│                                                                   │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                    [HTTP REST API]
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│                      BACKEND (Django)                            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  API Endpoints (DRF ViewSets)                                    │
-│                                                                   │
-│  ProjectViewSet ────────────────────────────────────────────┐    │
-│  ├─ GET /projects/                                         │    │
-│  ├─ POST /projects/                                        │    │
-│  ├─ POST /projects/{id}/approve/                          │    │
-│  ├─ POST /projects/{id}/reject/                           │    │
-│  ├─ POST /projects/{id}/request_revision/                 ├──→ Project Model
-│  └─ POST /projects/{id}/submit_for_approval/              │    │ ├─ name
-│                                                             │    │ ├─ status
-│  DocumentViewSet ────────────────────────────────────────┐ │    │ ├─ description
-│  ├─ GET /documents/                                      │ │    │ ├─ approval_status
-│  ├─ POST /documents/ (Upload)                            ├─┼──→ ├─ approved_by
-│  ├─ GET /documents/{id}/                                 │ │    │ └─ approved_at
-│  ├─ PUT /documents/{id}/                                 │ │    │
-│  └─ DELETE /documents/{id}/                              │ │    │
-│                                                           │ │    │
-│  ProjectApprovalViewSet (Read-only) ────────────┐        │ │    │
-│  ├─ GET /project-approvals/                     ├─────┐  │ │    │
-│  └─ GET /project-approvals/{id}/                      └──┼─┼──→ Document Model
-│                                                          │ │    │ ├─ project
-│  Filtering & Search ──────────────────────────────────┐ │ │    │ ├─ title
-│  ├─ django-filter (DjangoFilterBackend)              ├─┘ │    │ ├─ file
-│  ├─ SearchFilter (name, description)                  │  │    │ ├─ type
-│  └─ OrderingFilter (created_at, name)                 │  │    │ └─ uploaded_by
-│                                                       │  │    │
-│  Permission System ────────────────────────────────┐  │  │    │
-│  ├─ IsAuthenticated                               │  │  │    │
-│  ├─ IsAdminOrEngineer (for approvals)            ├──┘  │    │
-│  └─ RBAC (Customer sees only their projects)      │     │    │
-│                                                   │     │    │
-│  Notifications ────────────────────────────────┐  │     │    │
-│  ├─ NotificationService                       ├──┼─────┼──→ ProjectApproval Model
-│  ├─ Email on approve/reject                   │  │     │    │ ├─ project
-│  ├─ Email on document upload                  │  │     │    │ ├─ action
-│  └─ Email on revision request                 │  │     │    │ ├─ approver
-│                                                │  │     │    │ └─ notes
-│  Email Config ────────────────────────────────┤  │     │    │
-│  ├─ SMTP (Gmail, custom server)               │  │     │    │
-│  ├─ Console (development)                     │  │     │    │
-│  └─ HTML templates with context               │  │     │    │
-│                                                │  │     │    │
-│  Database ────────────────────────────────────┴──┴─────┘    │
-│  └─ MySQL (amazon database)                                   │
-│                                                                │
-└─────────────────────────────────────────────────────────────────┘
-```
+- Frontend: `frontend/`
+- Backend: `backend/`
+- API prefix: `/api/`
+- Local frontend dev server: `http://localhost:5173/`
+- Local backend dev server: `http://127.0.0.1:8000/`
 
----
+The application supports:
+- User registration and login
+- JWT authentication
+- Role-based navigation and access control
+- Projects, production, quality, and inventory views
+- Backend data services for user profile and business domain APIs
 
-## Data Flow Diagram
+## 2. Frontend Architecture
 
-### Document Upload Flow
+### 2.1 Entry point and routing
 
-```
-User clicks Upload
-       ↓
-Form submitted with:
-  - title
-  - document_type
-  - description
-  - file
-       ↓
-Frontend: FormData serialized
-       ↓
-POST /api/documents/
-       ↓
-Backend: DocumentViewSet.create()
-       ↓
-File saved to: backend/media/documents/YYYY/MM/DD/filename
-       ↓
-Document record created in DB
-       ↓
-NotificationService.send_document_uploaded()
-       ↓
-Email sent to project customer (optional)
-       ↓
-Response: {id, title, file_url, ...}
-       ↓
-Frontend: DocumentsList reloads
-       ↓
-User sees document in list ✅
-```
+- `frontend/src/main.jsx`: bootstraps React and renders the app.
+- `frontend/src/App.jsx`: defines the main route tree.
 
-### Approval Workflow Flow
+Route summary:
+- `/` redirects to `/dashboard` if authenticated, otherwise `/login`
+- `/login` renders `LoginPage`
+- `/register` renders `RegisterPage`
+- Protected routes under `RequireAuth`:
+  - `/dashboard` → `DashboardPage`
+  - `/projects` → `ProjectsPage`
+  - `/production` → `ProductionPage`
+  - `/quality` → `QualityPage`
+  - `/inventory` → `InventoryPage`
+- Any unknown route redirects to `/`
 
-```
-Project Created
-  status: "rnd"
-  approval_status: "pending"
-       ↓
-Engineer views project
-       ↓
-Fills notes + Clicks "Approve"
-       ↓
-POST /api/projects/{id}/approve/
-       ↓
-Backend: ProjectViewSet.approve()
-       ↓
-Updates Project:
-  - approval_status = "approved"
-  - approved_by = engineer
-  - approved_at = now()
-       ↓
-Creates ProjectApproval record
-  - action = "approved"
-  - notes = engineer's notes
-       ↓
-NotificationService.send_approval_status()
-       ↓
-Email sent to customer
-       ↓
-Response: {status: "approved"}
-       ↓
-Frontend: Page refreshes
-       ↓
-Customer sees ✅ Approved ✅
-```
+### 2.2 Authentication flow
 
-### Advanced Filter Flow
+- `frontend/src/lib/auth.js` manages auth token state using `localStorage`.
+- `frontend/src/context/AuthContext.jsx` manages current user data and refresh logic.
+- `frontend/src/ui/RequireAuth.jsx` blocks access to protected pages when no token exists and redirects to `/login`.
+- `frontend/src/ui/AppLayout.jsx` renders the main shell and navigation bar for logged-in users.
 
-```
-User clicks "Advanced Filters"
-       ↓
-Filter panel appears
-       ↓
-User selects:
-  - status: "approval"
-  - approval_status: "pending"
-  - date range
-  - search: "project name"
-       ↓
-Clicks "Apply"
-       ↓
-Frontend: load(filters)
-       ↓
-GET /api/projects/?status=approval&approval_status=pending&search=...
-       ↓
-Backend: DjangoFilterBackend + SearchFilter
-       ↓
-Filters applied in queryset
-       ↓
-Returns matching projects
-       ↓
-Frontend: Table updates with filtered results
-       ↓
-User sees only matching projects ✅
-```
+Auth state behavior:
+- Login obtains a JWT access token from `/api/auth/token/`
+- Token is saved with `setAccessToken()` into `localStorage`
+- `AuthContext` fetches `/api/auth/profile/` to load user details and role
+- Logout clears token and sends the user back to `/login`
 
----
+### 2.3 Page and navigation behavior
 
-## Component Hierarchy
+- `AppLayout` provides the shared layout and top navigation for protected pages.
+- `AppLayout` uses user role to conditionally show links:
+  - `admin` sees all pages
+  - `engineer` sees `dashboard`, `projects`, `production`
+  - `quality` sees `dashboard`, `projects`, `quality`
+  - `customer` sees `dashboard`, `projects`
 
-```
-ProjectsPage
-├── AdvancedFilters (collapsible)
-│   ├── Status dropdown
-│   ├── Approval Status dropdown
-│   ├── Date inputs
-│   ├── Search input
-│   └── Apply/Reset buttons
-│
-├── Create Project Form
-│   ├── Name input
-│   ├── Description textarea
-│   ├── Status select
-│   └── Submit button
-│
-├── Projects Table
-│   ├── ID column
-│   ├── Project name column
-│   ├── Status column
-│   ├── Approval column
-│   ├── Customer column
-│   └── View button (toggles expanded view)
-│
-└── Project Detail (when expanded)
-    ├── Project Info Card
-    │   ├── Status badge
-    │   ├── Approval status badge
-    │   ├── Created date
-    │   ├── Customer name
-    │   └── Description
-    │
-    ├── DocumentsList
-    │   ├── Document grid
-    │   ├── Type badges
-    │   ├── Download buttons
-    │   └── Metadata
-    │
-    ├── DocumentUpload
-    │   ├── Title input
-    │   ├── Type select
-    │   ├── Description textarea
-    │   ├── File input
-    │   └── Upload button
-    │
-    └── ApprovalWorkflow
-        ├── Status display
-        ├── Approval notes display
-        ├── Approver info
-        ├── Notes input
-        ├── Action buttons
-        │   ├── Approve
-        │   ├── Reject
-        │   └── Request Changes
-        └── Error display
-```
+Page list:
+- `LoginPage.jsx`: username/password login
+- `RegisterPage.jsx`: create account with username, email, name, role, password
+- `DashboardPage.jsx`: main landing page after login
+- `ProjectsPage.jsx`: project management view
+- `ProductionPage.jsx`: production workflow view
+- `QualityPage.jsx`: quality management view
+- `InventoryPage.jsx`: inventory and supply chain view
 
----
+### 2.4 API client
 
-## State Management Flow
+- `frontend/src/lib/api.js` exports a shared Axios instance.
+- Default backend base URL is `http://127.0.0.1:8000` unless overridden by `VITE_API_BASE_URL`.
+- The Axios instance attaches the `Authorization: Bearer <token>` header automatically when available.
+- If the backend returns `401 Unauthorized`, the frontend clears auth state and forces re-login.
 
-```
-ProjectsPage (parent state)
-├── projects [] ─────────────────┐
-│                                │
-├── selectedProject {...} ───────┼─→ DocumentsList
-│                                │   └─ Uses projectId
-├── filters {...} ───────────────┤
-│                                ├─→ DocumentUpload
-├── loading boolean ─────────────┤   └─ Uses projectId
-│                                │
-├── error string ────────────────┤
-│                                └─→ ApprovalWorkflow
-└── create {...}                    └─ Uses full project
+### 2.5 Data flow for auth and registration
 
-When filters change:
-  filters → load(filters) → API call → setProjects → Table updates
+Registration flow:
+1. User submits the form in `RegisterPage`
+2. Frontend POSTs `/api/auth/register/` with JSON payload
+3. Backend creates a user and returns success
+4. Frontend redirects to `/login`
 
-When document uploaded:
-  onDocumentAdded() → load() → refreshes projects & documents
+Login flow:
+1. User submits credentials in `LoginPage`
+2. Frontend POSTs `/api/auth/token/` and receives JWT access token
+3. Token is stored in `localStorage`
+4. `AuthContext` refreshes the user profile from `/api/auth/profile/`
+5. User is redirected to `/dashboard`
 
-When approval action:
-  onApprovalAction() → load() → updates approval_status display
-```
 
----
+## 3. Backend Architecture
 
-## Database Relationships
+### 3.1 Django project layout
 
-```
-User (Django)
-  │
-  ├─→ (1 to M) Project (created by customer)
-  │   │
-  │   ├─→ (1 to M) Document
-  │   │   └─ uploaded_by → User
-  │   │
-  │   └─→ (1 to M) ProjectApproval
-  │       └─ approver → User
-  │
-  ├─→ (1 to M) Document (as uploader)
-  │
-  └─→ (1 to M) ProjectApproval (as approver)
-```
+- `backend/manage.py`: Django CLI entry point
+- `backend/factoryiq/`: Django project configuration
+  - `settings.py`: project settings, installed apps, database setup, CORS, authentication
+  - `urls.py`: root URL routing and API namespace setup
+- `backend/users/`: authentication user app
+- `backend/projects/`, `backend/production/`, `backend/quality/`, `backend/supplychain/`: domain apps
 
----
+### 3.2 Authentication backend
 
-## API Request/Response Examples
+- `backend/users/models.py`: custom `User` model extends `AbstractUser`
+  - Adds `role` with choices `admin`, `engineer`, `quality`, `customer`
+- `backend/users/serializers.py`:
+  - `RegisterSerializer`: creates new users and hashes password
+  - `UserSerializer`: returns authenticated user profile data
+- `backend/users/views.py`:
+  - `RegisterView`: allows unauthenticated POST to create a user
+  - `ProfileView`: authenticated GET for current user profile
+- `backend/factoryiq/urls.py` configures auth endpoints:
+  - `api/auth/register/`
+  - `api/auth/profile/`
+  - `api/auth/token/`
+  - `api/auth/token/refresh/`
 
-### Document Upload Request
+### 3.3 API routing and domain apps
 
-```http
-POST /api/documents/ HTTP/1.1
-Authorization: Bearer <token>
-Content-Type: multipart/form-data
+Root URL routing in `backend/factoryiq/urls.py`:
+- `api/auth/` → `users.urls`
+- `api/auth/token/` and `api/auth/token/refresh/` → JWT views
+- `api/` → includes `projects`, `production`, `quality`, `supplychain` URL modules
 
-project=1
-title=BOM v1.0
-document_type=bom
-description=Part list
-file=<binary>
-```
+This creates a clean API boundary where the frontend only interacts with `/api/` endpoints.
 
-**Response:**
+### 3.4 Request flow for protected resources
 
-```json
-{
-  "id": 1,
-  "project": 1,
-  "project_name": "My Project",
-  "title": "BOM v1.0",
-  "document_type": "bom",
-  "file": "https://api.test/media/documents/2026/03/19/bom_v1.pdf",
-  "description": "Part list",
-  "version": 1,
-  "uploaded_by": 5,
-  "uploaded_by_username": "engineer1",
-  "created_at": "2026-03-19T10:30:00Z",
-  "updated_at": "2026-03-19T10:30:00Z"
-}
-```
+- When frontend sends a request to a protected endpoint, the shared Axios client attaches the JWT access token.
+- Django REST Framework authenticates the token and determines user identity.
+- Protected views use `permissions.IsAuthenticated` or custom permissions to allow access.
+- The backend returns domain data for projects, production, quality, or inventory.
 
-### Project Approval Request
+### 3.5 Database and environment behavior
 
-```http
-POST /api/projects/1/approve/ HTTP/1.1
-Authorization: Bearer <token>
-Content-Type: application/json
+- Development uses SQLite when `DJANGO_USE_SQLITE=1`.
+- Production is configured for MySQL by environment variables, but local development is intentionally simplified.
+- Migrations are managed via `backend/manage.py migrate`.
 
-{
-  "notes": "Looks good, approved!"
-}
-```
+## 4. File and feature mapping
 
-**Response:**
+Frontend key files:
+- `frontend/src/App.jsx`: main route definitions
+- `frontend/src/context/AuthContext.jsx`: current user and auth refresh logic
+- `frontend/src/lib/api.js`: REST client
+- `frontend/src/lib/auth.js`: localStorage token helper
+- `frontend/src/ui/AppLayout.jsx`: authenticated page shell and navigation
+- `frontend/src/ui/RequireAuth.jsx`: protects routes
+- `frontend/src/views/LoginPage.jsx`: login screen
+- `frontend/src/views/RegisterPage.jsx`: registration screen
+- `frontend/src/views/DashboardPage.jsx`: dashboard landing page
 
-```json
-{
-  "status": "approved"
-}
-```
+Backend key files:
+- `backend/factoryiq/settings.py`: application settings and CORS configuration
+- `backend/factoryiq/urls.py`: root API routing
+- `backend/users/models.py`: custom user definition
+- `backend/users/serializers.py`: auth serializers
+- `backend/users/views.py`: registration and profile views
+- `backend/users/urls.py`: auth endpoint paths
 
-### Filter Query
+## 5. Navigation and access flow
 
-```http
-GET /api/projects/?status=approval&approval_status=pending&search=test HTTP/1.1
-Authorization: Bearer <token>
-```
+Public pages:
+- `/login`: user login page
+- `/register`: new account creation page
 
-**Response:**
+Protected pages (require valid JWT):
+- `/dashboard`
+- `/projects`
+- `/production`
+- `/quality`
+- `/inventory`
 
-```json
-[
-  {
-    "id": 1,
-    "name": "Test Project",
-    "status": "approval",
-    "approval_status": "pending",
-    "customer": 1,
-    "customer_username": "customer1",
-    ...
-  }
-]
-```
+Protected pages are rendered inside `AppLayout` and share the same header/navigation.
 
----
+Role-based visibility:
+- `admin`: can access all protected pages
+- `engineer`: sees production in addition to dashboard and projects
+- `quality`: sees quality in addition to dashboard and projects
+- `customer`: sees only dashboard and projects
 
-## Technology Stack Map
+## 6. Practical notes
 
-```
-Frontend Layer:
-  React 18
-  ├─ Components (DocumentUpload, etc.)
-  ├─ Hooks (useState, useEffect)
-  ├─ Axios (API calls)
-  └─ CSS3 (Styling)
+- If the backend is not running, registration and login fail because the frontend cannot reach `/api/auth/*`.
+- If tokens are invalid or expired, the frontend clears auth and forces re-login.
+- The backend must be reachable at `VITE_API_BASE_URL` or the default backend URL for frontend requests to work.
+- For development, start backend first, then frontend.
 
-API Layer:
-  Django REST Framework
-  ├─ Serializers
-  ├─ ViewSets
-  ├─ Permissions
-  ├─ Filters (django-filter)
-  └─ Authentication (JWT)
+## 7. Recommended startup sequence
 
-Business Logic:
-  Django Models
-  ├─ Project (with approval fields)
-  ├─ Document (with file storage)
-  └─ ProjectApproval (audit trail)
+1. `cd backend`
+2. `python manage.py migrate`
+3. `python manage.py runserver`
+4. `cd ../frontend`
+5. `npm install`
+6. `npm run dev`
 
-Services:
-  NotificationService
-  ├─ Email backend (SMTP/Console)
-  └─ Templates
-
-Database:
-  MySQL
-  ├─ 3 main tables
-  └─ Relationships
-```
-
----
-
-## Error Handling Flow
-
-```
-User Action
-  ↓
-Frontend Try/Catch
-  ↓ (Error)
-  └─→ Display error message
-
-API Request
-  ↓
-Backend Try/Catch
-  ↓ (Error)
-  └─→ Return error response
-      ├─ 400 Bad Request (validation)
-      ├─ 401 Unauthorized (auth)
-      ├─ 403 Forbidden (permission)
-      └─ 500 Server Error
-
-Email Send
-  ↓
-Try/Catch with fail_silently=True
-  ↓ (Error)
-  └─→ Log but don't crash
-      └─ App continues normally ✅
-```
-
----
-
-## Deployment Architecture
-
-```
-Production Setup:
-┌──────────────────┐
-│   Load Balancer  │
-└────────┬─────────┘
-         │
-    ┌────┴────┐
-    │          │
-┌───▼──┐  ┌───▼──┐
-│Web 1 │  │Web 2 │  (Django servers)
-└───┬──┘  └───┬──┘
-    │         │
-    └────┬────┘
-         │
-    ┌────▼────────┐
-    │ MySQL Prod  │
-    │ amazon DB   │
-    └─────────────┘
-
-Frontend served via CDN:
-  Vercel/Netlify → Static files → Users
-
-Storage:
-  Media files → Cloudinary or AWS S3 (future)
-
-Email:
-  SMTP → Gmail / SendGrid service
-```
-
----
-
-This architecture supports:
-
-- ✅ Scalability (stateless APIs)
-- ✅ Reliability (error handling)
-- ✅ Security (auth, permissions)
-- ✅ Performance (filtering at database level)
-- ✅ Maintainability (clear separation of concerns)
+This ensures the backend API is available before the frontend starts making authenticated requests.
